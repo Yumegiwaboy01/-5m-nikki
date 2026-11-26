@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#F5F4EF">
+<title>5m Nikki</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#F5F4EF;color:#25243D;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+main{max-width:480px;margin:auto;padding:24px;min-height:100dvh;display:flex;flex-direction:column}
+header{display:flex;justify-content:space-between;align-items:center}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:12px}
+h1{font-size:20px;font-weight:500;letter-spacing:1px}
+h2{font-size:25px;font-weight:500;line-height:1.8}
+small,.muted{color:#827f77;font-size:13px}
+.home{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding-bottom:40px}
+.mic{background:#25243D;color:white;border-radius:50%;width:82px;height:82px;display:grid;place-items:center;margin:36px auto 8px}
+.mic svg{width:30px}
+.chat{flex:1;display:flex;flex-direction:column;gap:14px;padding:24px 0}
+.bubble{background:#E8E6DE;border-radius:18px 18px 18px 4px;padding:14px;max-width:88%;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;align-self:flex-start}
+.mine{background:#25243D;color:white;align-self:flex-end;border-radius:18px 18px 4px 18px}
+textarea{font:inherit;font-size:16px;width:100%;border:0;border-radius:16px;background:#E8E6DE;color:#25243D;padding:14px;line-height:1.8;resize:vertical}
+.row{display:flex;align-items:center;gap:8px}
+.primary{background:#25243D;color:white;border-radius:14px;width:100%;margin-top:12px}
+.round{background:#25243D;color:white;border-radius:50%;width:44px;height:44px;flex-shrink:0;padding:8px}
+.round svg{width:22px}
+.tabs{display:flex;background:#E8E6DE;border-radius:30px;padding:4px;margin:20px 0}
+.tabs button{flex:1;border-radius:30px}
+.active{background:#25243D;color:white}
+.entry{display:block;width:100%;text-align:left;border-bottom:1px solid #ddd;white-space:pre-wrap}
+.status{font-size:12px;color:#827f77;text-align:center;min-height:20px}
+.paper{background:transparent;min-height:250px}
+.recording{background:#a96060}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+const app=document.querySelector('#app');
+const mic='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"/></svg>';
+const topics=[
+'今日は、どんな一日だった？',
+'何もない日。今日、何を食べた？',
+'最近、好きだなと思ったものは？',
+'今日、少し嬉しかったことは？',
+'帰り道、何か目に留まった？',
+'今、何を考えている？',
+'明日、何をしてみたい？'
+];
+let t=0,screen='home',messages=[],answers=[],draft='',mode='日記',edits={},rec=null,saved=[];
+try{saved=JSON.parse(localStorage.getItem('5mNikki')||'[]')}catch{}
+const date=()=>new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+function el(tag,cls,txt){
+let n=document.createElement(tag);
+n.className=cls||'';
+if(txt!==undefined)n.textContent=txt;
+return n
+}
+function btn(txt,fn,cls,html){
+let n=el('button',cls);
+if(html)n.innerHTML=txt;
+else n.textContent=txt;
+n.onclick=fn;
+return n
+}
+function stop(){
+if(rec){try{rec.abort()}catch{}rec=null}
+}
+function go(s){stop();screen=s;render()}
+function start(voice){
+messages=[{q:topics[t]}];
+answers=[];draft='';edits={};mode='日記';
+go('chat');
+if(voice)document.querySelector('#voice').click();
+else document.querySelector('textarea').focus()
+}
+function follow(s){
+if(answers.length>2)return 'ほかにも残しておきたいことはある？';
+if(/何も|普通|特にない/.test(s))return '今日食べたものや、見た景色で覚えていることはある？';
+if(/空|夕焼け|景色/.test(s))return 'どんな景色だった？';
+if(/疲れ|仕事/.test(s))return '少しでもほっとした瞬間はあった？';
+return answers.length===1?'もう少し、そのことを聞かせて。':'そのとき、どんな気持ちだった？'
+}
+function finish(){
+if(draft.trim()){
+answers.push(draft.trim());
+messages.push({a:draft.trim()});
+draft=''
+}
+if(answers.length)go('result')
+}
+function render(){
+app.replaceChildren();
+let h=el('header');
+h.append(
+btn(screen==='home'?'☷':'‹',()=>go(screen==='home'?'history':screen==='result'?'chat':'home')),
+el('h1','','5m Nikki'),
+screen==='chat'?btn('完了',finish):el('span','','　')
+);
+app.append(h);
+if(screen==='home'){
+let x=el('section','home');
+x.append(
+el('small','',date()),
+el('h2','',topics[t]),
+btn('別の話題にする ↻',()=>{t=(t+1)%topics.length;render()},'muted'),
+btn(mic,()=>start(true),'mic',true),
+el('div','','話す'),
+btn('文字で入力する',()=>start(false),'muted')
+);
+app.append(x)
+}else if(screen==='chat'){
+let c=el('div','chat');
+messages.forEach(m=>c.append(el('div','bubble'+(m.a?' mine':''),m.a||m.q)));
+let input=el('textarea');
+input.rows=2;
+input.placeholder='言葉を残す…';
+input.value=draft;
+input.oninput=()=>draft=input.value;
+let status=el('div','status'),row=el('div','row');
+let v=btn(mic,()=>listen(input,status,v),'round',true);
+v.id='voice';
+v.setAttribute('aria-label','音声入力');
+row.append(input,v,btn('↑',()=>{
+if(!draft.trim())return;
+stop();
+let s=draft.trim();
+answers.push(s);
+messages.push({a:s},{q:follow(s)});
+draft='';
+render();
+window.scrollTo(0,document.body.scrollHeight)
+},'round'));
+app.append(c,row,status,btn('別の質問にする ↻',()=>{
+t=(t+1)%topics.length;
+messages.push({q:topics[t]});
+render()
+},'muted'));
+if(answers.length)app.append(btn('文章にする',finish,'primary'))
+}else if(screen==='result'){
+let tabs=el('div','tabs');
+['日記','note','SNS'].forEach(m=>tabs.append(btn(m,()=>{mode=m;render()},m===mode?'active':'')));
+let input=el('textarea','paper');
+input.value=edits[mode]??((mode==='note'?'今日の記録\n\n':'')+answers.join(mode==='SNS'?'\n':'\n\n'));
+input.oninput=()=>edits[mode]=input.value;
+let status=el('div','status');
+app.append(tabs,el('small','',date()),input,
+btn('コピーする',async()=>{
+try{
+await navigator.clipboard.writeText(input.value);
+status.textContent='コピーしました'
+}catch{
+input.focus();input.select();
+status.textContent='選択した文章をコピーしてください'
+}
+},'primary'),
+btn('保存する',()=>{
+if(!input.value.trim())return;
+saved.unshift({date:date(),text:input.value});
+try{
+localStorage.setItem('5mNikki',JSON.stringify(saved));
+status.textContent='保存しました'
+}catch{
+status.textContent='この画面内のみ保存しました'
+}
+},'primary'),status,
+btn('ホームに戻る',()=>go('home'),'muted'))
+}else{
+app.append(el('h2','','これまでの日記'));
+if(!saved.length)app.append(el('small','','まだ日記はありません。'));
+saved.forEach(s=>app.append(btn(s.date+'\n'+s.text.slice(0,70),()=>{
+answers=[s.text];
+messages=[{a:s.text}];
+draft='';mode='日記';edits={};
+go('result')
+},'entry')))
+}
+}
+function listen(input,status,v){
+if(rec){rec.stop();return}
+let R=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!R){
+input.focus();
+status.textContent='キーボードのマイクを使ってね。';
+return
+}
+try{
+let r=new R();
+rec=r;
+r.lang='ja-JP';
+r.onresult=e=>{
+draft+=(draft?' ':'')+e.results[0][0].transcript;
+input.value=draft
+};
+r.onerror=()=>{
+status.textContent='キーボードのマイクを使ってね。';
+input.focus()
+};
+r.onend=()=>{
+rec=null;
+v.classList.remove('recording');
+if(status.textContent==='聞いています…')status.textContent=''
+};
+r.start();
+v.classList.add('recording');
+status.textContent='聞いています…'
+}catch{
+rec=null;
+input.focus();
+status.textContent='キーボードのマイクを使ってね。'
+}
+}
+render();
+</script>
+</body>
+</html>
